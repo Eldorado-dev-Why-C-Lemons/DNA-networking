@@ -1,0 +1,120 @@
+import numpy as np
+
+# @title Введите температуру системы (°C, можно через точку или запятую) { run: "auto" }
+T_input = "1,111111"  # @param {type:"string"}
+
+
+def calc_z_factor(P_mpa, T_K, Tc, Pc, omega):
+  R = 8.31446
+  P = float(P_mpa) * 1e6
+  Pc_pa = float(Pc) * 1e6
+
+  Tr = float(T_K) / float(Tc)
+  kappa = 0.37464 + 1.54226 * omega - 0.26992 * (omega**2)
+  alpha = (1.0 + kappa * (1.0 - np.sqrt(Tr))) ** 2
+
+  a = 0.45724 * (R**2) * (Tc**2) / Pc_pa * alpha
+  b = 0.07780 * R * Tc / Pc_pa
+
+  A = a * P / ((R * T_K) ** 2)
+  B = b * P / (R * T_K)
+
+  coeffs = [
+      1.0,
+      -(1.0 - B),
+      (A - 3.0 * (B**2) - 2.0 * B),
+      -(A * B - (B**2) - (B**3)),
+  ]
+  roots = np.roots(coeffs)
+  real_roots = roots[np.isreal(roots)].real
+  return float(np.max(real_roots))
+
+
+def calc_gases_equilibrium(T_raw):
+  # Безопасное преобразование: заменяем запятую на точку и убираем пробелы
+  try:
+    clean_str = str(T_raw).replace(",", ".").strip()
+    T_celsius = float(clean_str)
+  except ValueError:
+    print(f"Ошибка ввода: '{T_raw}' не является числом.")
+    return
+
+  T_K = T_celsius + 273.15
+  R = 8.31446
+
+  gases = {
+      "Метан (CH4)": {
+          "M": 16.04,
+          "Tc": 190.56,
+          "Pc": 4.599,
+          "omega": 0.011,
+          "T_max": 25.0,
+          "liq": (38.980, 8533.80),
+          "ice": (14.717, 1886.79),
+      },
+      "Этан (C2H6)": {
+          "M": 30.07,
+          "Tc": 305.32,
+          "Pc": 4.872,
+          "omega": 0.099,
+          "T_max": 14.7,
+          "liq": (44.273, 10420.0),
+          "ice": (17.510, 3105.0),
+      },
+      "Пропан (C3H8)": {
+          "M": 44.10,
+          "Tc": 369.83,
+          "Pc": 4.248,
+          "omega": 0.152,
+          "T_max": 5.7,
+          "liq": (61.980, 15490.0),
+          "ice": (18.150, 3520.0),
+      },
+      "Углекислый газ (CO2)": {
+          "M": 44.01,
+          "Tc": 304.13,
+          "Pc": 7.377,
+          "omega": 0.224,
+          "T_max": 10.0,
+          "liq": (44.580, 10246.0),
+          "ice": (18.594, 3161.4),
+      },
+      "Сероводород (H2S)": {
+          "M": 34.08,
+          "Tc": 373.10,
+          "Pc": 9.000,
+          "omega": 0.100,
+          "T_max": 29.5,
+          "liq": (34.828, 8266.1),
+          "ice": (16.560, 3270.0),
+      },
+  }
+
+  phase_water = "Жидкая вода" if T_celsius >= 0.0 else "Лед (T < 0 °C)"
+  print(f"=== РАВНОВЕСНЫЕ ПАРАМЕТРЫ ПРИ T = {T_celsius:.2f} °C ===")
+  print(f"Состояние водной фазы: {phase_water}\n")
+
+  c1 = "Газ"
+  c2 = "P_равн, МПа"
+  c3 = "Коэф. Z"
+  c4 = "Плотность, кг/м³"
+  print(f"{c1:<22} | {c2:<12} | {c3:<9} | {c4:<20}")
+  print("-" * 72)
+
+  for name, prop in gases.items():
+    if T_celsius > prop["T_max"]:
+      t_lim = prop["T_max"]
+      print(f"{name:<22} | {'---':<12} | {'---':<9} | Выше {t_lim} °C")
+      continue
+
+    A0, B0 = prop["liq"] if T_celsius >= 0.0 else prop["ice"]
+    P_eq_mpa = np.exp(A0 - B0 / T_K) / 1000.0
+
+    Z = calc_z_factor(P_eq_mpa, T_K, prop["Tc"], prop["Pc"], prop["omega"])
+    M_kg = prop["M"] / 1000.0
+    rho_eq = (P_eq_mpa * 1e6 * M_kg) / (Z * R * T_K)
+
+    print(f"{name:<22} | {P_eq_mpa:<12.3f} | {Z:<9.3f} | {rho_eq:<20.2f}")
+
+
+calc_gases_equilibrium(T_input)

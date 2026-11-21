@@ -1,0 +1,113 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# @title Входные параметры системы (пропан + вода) { run: "auto" }
+P_sys = 0.45  # @param {type:"number"}
+T_sys = 3.0  # @param {type:"number"}
+S_cm2 = 100.0  # @param {type:"number"}
+hours = 24.0  # @param {type:"number"}
+
+
+def propane_hydrate_model(P_sys, T_sys, S_cm2, hours):
+  T_K = T_sys + 273.15
+  T_ref = 3.0 + 273.15
+  R = 8.314
+
+  # Проверка верхней температурной границы (критическая точка гидрата C3H8 ~ 5.7 °C)
+  if T_sys > 5.7:
+    print(f"При T = {T_sys} °C гидрат чистого пропана не существует.")
+    print("Выше +5.7 °C пропан переходит в жидкую фазу без образования гидрата.")
+    return
+
+  # 1. Равновесное давление гидрата пропана (МПа) при T < 5.7 °C
+  P_eq = np.exp(52.450 - 14775.0 / T_K) / 1000.0
+
+  # Давление насыщенных паров пропана (граница сжижения газа, МПа)
+  P_vap = np.exp(14.38 - 2215.0 / T_K)
+
+  if P_sys <= P_eq:
+    print(
+        f"Гидрат не образуется: P ({P_sys} МПа) <= P_равн ({P_eq:.3f} МПа)."
+    )
+    return
+
+  # Эффективное давление (если P_sys выше P_vap, пропан сжижается, и движущая сила фиксируется)
+  is_liquid = False
+  if P_sys > P_vap:
+    P_eff = P_vap
+    is_liquid = True
+  else:
+    P_eff = P_sys
+
+  dP = P_eff - P_eq
+
+  # 2. Динамический расчет alpha_diff и v_kin для пропана (структура КС-II)
+  alpha_ref = 3.5e-12  # Крупная молекула C3H8 диффундирует медленнее метана
+  v_ref = 8.0e-8  # Начальная кинетическая скорость сборки
+  E_diff = 62000.0
+  E_kin = 70000.0
+
+  alpha_diff = alpha_ref * np.exp((-E_diff / R) * (1.0 / T_K - 1.0 / T_ref))
+  v_kin = v_ref * np.exp((-E_kin / R) * (1.0 / T_K - 1.0 / T_ref))
+
+  # 3. Константы модели Дила — Гроува
+  B = 2.0 * alpha_diff * dP
+  A = (2.0 * alpha_diff) / v_kin
+
+  # 4. Расчет толщины и массы (свойства гидрата пропана КС-II)
+  S_m2 = S_cm2 * 1e-4
+  rho_hydrate = 880.0  # Плотность гидрата пропана, кг/м³
+  gas_factor = 80.0  # Газосодержание (~80 м³ газа в 1 м³ гидрата)
+
+  time_h = np.linspace(0, hours, 250)
+  time_s = time_h * 3600.0
+
+  h_m = (-A + np.sqrt(A**2 + 4.0 * B * time_s)) / 2.0
+  h_mm = h_m * 1000.0
+  mass_g = S_m2 * h_m * rho_hydrate * 1000.0
+  gas_liters = (S_m2 * h_m[-1] * gas_factor) * 1000.0
+
+  # Вывод итогов
+  print(f"=== РАСЧЕТ ДЛЯ ПРОПАНА (T = {T_sys} °C, P = {P_sys} МПа) ===")
+  if is_liquid:
+    print(
+        f"ПРИМЕЧАНИЕ: При {P_sys} МПа пропан сжижен (P_насыщ = {P_vap:.3f} МПа)."
+    )
+    print("Движущая сила ограничена давлением насыщенных паров.")
+  print(f"Равновесное давление (P_eq):   {P_eq:.3f} МПа")
+  print(f"Движущая сила (dP):            {dP:.3f} МПа")
+  print(f"Коэф. диффузии (alpha_diff):   {alpha_diff:.3e} м²/(с·МПа)")
+  print(f"Кинетич. константа (v_kin):    {v_kin:.3e} м/(с·МПа)")
+  print(f"Константа A (крит. толщина):   {A * 1000:.3f} мм")
+  print(f"Константа B (скорость роста):  {B:.3e} м²/с")
+  print("-" * 54)
+  print(f"Итоговая толщина за {hours} ч:   {h_mm[-1]:.2f} мм")
+  print(f"Итоговая масса гидрата:        {mass_g[-1]:.2f} г")
+  print(f"Поглощено пропана (при н.у.):  {gas_liters:.2f} литров")
+
+  # 5. Построение двух графиков рядом
+  fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+  title_main = f"Гидрат пропана (P={P_sys} МПа, T={T_sys} °C, S={S_cm2} см²)"
+  fig.suptitle(title_main, fontsize=13, fontweight="bold")
+
+  ax1.plot(time_h, h_mm, color="#d95f02", linewidth=2.5)
+  ax1.set_title("Рост толщины слоя гидрата C3H8")
+  ax1.set_xlabel("Время, часы")
+  ax1.set_ylabel("Толщина слоя h, мм")
+  ax1.grid(True, linestyle="--", alpha=0.6)
+  ax1.set_xlim(0, hours)
+  ax1.set_ylim(0, max(h_mm) * 1.1)
+
+  ax2.plot(time_h, mass_g, color="#7570b3", linewidth=2.5)
+  ax2.set_title("Накопление массы гидрата на матрице")
+  ax2.set_xlabel("Время, часы")
+  ax2.set_ylabel("Масса гидрата m, г")
+  ax2.grid(True, linestyle="--", alpha=0.6)
+  ax2.set_xlim(0, hours)
+  ax2.set_ylim(0, max(mass_g) * 1.1)
+
+  plt.tight_layout()
+  plt.show()
+
+
+propane_hydrate_model(P_sys, T_sys, S_cm2, hours)

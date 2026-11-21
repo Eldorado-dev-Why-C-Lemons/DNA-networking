@@ -1,0 +1,94 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# @title Входные параметры системы (метан + вода) { run: "auto" }
+P_sys = 8.0  # @param {type:"number"}
+T_sys = 3.0  # @param {type:"number"}
+S_cm2 = 100.0  # @param {type:"number"}
+hours = 24.0  # @param {type:"number"}
+
+
+def dynamic_hydrate_model(P_sys, T_sys, S_cm2, hours):
+  T_K = T_sys + 273.15
+  T_ref = 3.0 + 273.15
+  R = 8.314
+
+  # 1. Равновесное давление метана (МПа)
+  P_eq = np.exp(38.980 - 8533.80 / T_K) / 1000.0
+  dP = P_sys - P_eq
+
+  if dP <= 0:
+    print(
+        f"Гидрат не образуется: P ({P_sys} МПа) <= P_равн ({P_eq:.2f} МПа)."
+    )
+    return
+
+  # 2. Динамический расчет alpha_diff и v_kin по закону Аррениуса
+  alpha_ref = 2.0e-11
+  v_ref = 1.0e-7
+  E_diff = 55000.0
+  E_kin = 65000.0
+
+  alpha_diff = alpha_ref * np.exp((-E_diff / R) * (1.0 / T_K - 1.0 / T_ref))
+  v_kin = v_ref * np.exp((-E_kin / R) * (1.0 / T_K - 1.0 / T_ref))
+
+  if dP > 6.0:
+    alpha_diff *= 1.0 + 0.15 * (dP - 6.0)
+
+  # 3. Константы модели Дила — Гроува
+  B = 2.0 * alpha_diff * dP
+  A = (2.0 * alpha_diff) / v_kin
+
+  # 4. Расчет толщины и массы во времени
+  S_m2 = S_cm2 * 1e-4
+  rho_hydrate = 910.0
+  gas_factor = 160.0
+
+  time_h = np.linspace(0, hours, 250)
+  time_s = time_h * 3600.0
+
+  h_m = (-A + np.sqrt(A**2 + 4.0 * B * time_s)) / 2.0
+  h_mm = h_m * 1000.0
+  mass_g = S_m2 * h_m * rho_hydrate * 1000.0
+  gas_liters = (S_m2 * h_m[-1] * gas_factor) * 1000.0
+
+  # Вывод итогов в консоль
+  print(f"=== РАСЧЕТ ПРИ T = {T_sys} °C, P = {P_sys} МПа, S = {S_cm2} СМ² ===")
+  print(f"Равновесное давление (P_eq):   {P_eq:.2f} МПа")
+  print(f"Коэф. диффузии (alpha_diff):   {alpha_diff:.3e} м²/(с·МПа)")
+  print(f"Кинетич. константа (v_kin):    {v_kin:.3e} м/(с·МПа)")
+  print(f"Константа A (крит. толщина):   {A * 1000:.3f} мм")
+  print(f"Константа B (скорость роста):  {B:.3e} м²/с")
+  print("-" * 54)
+  print(f"Итоговая толщина за {hours} ч:   {h_mm[-1]:.2f} мм")
+  print(f"Итоговая масса гидрата:        {mass_g[-1]:.2f} г")
+  print(f"Поглощено метана (при н.у.):   {gas_liters:.2f} литров")
+
+  # 5. Построение двух графиков рядом
+  fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+  title_main = f"Гидрат метана (P={P_sys} МПа, T={T_sys} °C, S={S_cm2} см²)"
+  fig.suptitle(title_main, fontsize=13, fontweight="bold")
+
+  # Левый график: Толщина
+  ax1.plot(time_h, h_mm, color="#1f77b4", linewidth=2.5)
+  ax1.set_title("Рост толщины слоя гидрата")
+  ax1.set_xlabel("Время, часы")
+  ax1.set_ylabel("Толщина слоя h, мм")
+  ax1.grid(True, linestyle="--", alpha=0.6)
+  ax1.set_xlim(0, hours)
+  ax1.set_ylim(0, max(h_mm) * 1.1)
+
+  # Правый график: Масса
+  ax2.plot(time_h, mass_g, color="#2ca02c", linewidth=2.5)
+  ax2.set_title("Накопление массы гидрата на матрице")
+  ax2.set_xlabel("Время, часы")
+  ax2.set_ylabel("Масса гидрата m, г")
+  ax2.grid(True, linestyle="--", alpha=0.6)
+  ax2.set_xlim(0, hours)
+  ax2.set_ylim(0, max(mass_g) * 1.1)
+
+  plt.tight_layout()
+  plt.show()
+
+
+dynamic_hydrate_model(P_sys, T_sys, S_cm2, hours)

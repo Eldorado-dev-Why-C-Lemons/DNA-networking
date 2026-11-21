@@ -1,0 +1,43 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+# @title Параметры расчета толщины гидрата { run: "auto" }
+P_sys = 8.0  # @param {type:"number"}
+T_sys = 3.0  # @param {type:"number"}
+hours = 24.0  # @param {type:"number"}
+
+
+def calc_thickness(P_sys, T_sys, hours):
+  # 1. Равновесное давление метана при заданной температуре (МПа)
+  P_eq = np.exp(38.980 - 8533.80 / (T_sys + 273.15)) / 1000.0
+  dP = P_sys - P_eq
+
+  if dP <= 0:
+    print(f"При {P_sys} МПа и {T_sys} °C гидрат не растет (P_равн = {P_eq:.2f} МПа).")
+    return
+
+  # 2. Константы модели Дила — Гроува
+  alpha_diff = 2.0e-11
+  v_kin = 1.0e-7
+  B = 2 * alpha_diff * dP
+  A = B / (v_kin * dP)
+
+  # 3. Расчет толщины слоя (в миллиметрах)
+  time_h = np.linspace(0, hours, 200)
+  h_mm = ((-A + np.sqrt(A**2 + 4 * B * (time_h * 3600))) / 2.0) * 1000.0
+
+  print(f"Через {hours} ч толщина слоя составит: {h_mm[-1]:.2f} мм")
+
+  # 4. График толщины
+  plt.figure(figsize=(8, 4))
+  plt.plot(time_h, h_mm, color="#1f77b4", linewidth=2.5)
+  plt.title(f"Толщина слоя гидрата (P = {P_sys} МПа, T = {T_sys} °C)")
+  plt.xlabel("Время, часы")
+  plt.ylabel("Толщина, мм")
+  plt.grid(True, linestyle="--", alpha=0.6)
+  plt.xlim(0, hours)
+  plt.ylim(0, max(h_mm) * 1.1)
+  plt.show()
+
+
+calc_thickness(P_sys, T_sys, hours)
